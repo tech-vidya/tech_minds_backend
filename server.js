@@ -18,6 +18,8 @@ import adminRoutes      from "./routes/admin.routes.js";
 import walletRoutes     from "./routes/wallet.routes.js";
 import couponRoutes     from "./routes/coupon.routes.js";
 import paymentRoutes    from "./routes/payment.routes.js";
+import internshipRoutes from "./routes/internship.routes.js";
+import certificateRoutes from "./routes/certificate.routes.js";
 
 connectDB();
 
@@ -66,6 +68,8 @@ app.use("/api/assignments", assignmentRoutes);
 app.use("/api/admin",       adminRoutes);
 app.use("/api/wallet",      walletRoutes);
 app.use("/api/coupons",     couponRoutes);
+app.use("/api/internships", internshipRoutes);
+app.use("/api/certificates", certificateRoutes);
 
 app.get("/api/health", (req, res) => {
   res.status(200).json({

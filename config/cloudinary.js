@@ -14,15 +14,14 @@ cloudinary.config({
 // Videos can only be served via a time-limited signed URL — never a plain link.
 const videoStorage = new CloudinaryStorage({
   cloudinary,
-  params: {
+  params: async (req, file) => ({
     folder:           "techvidya/videos",
     resource_type:    "video",
-    type:             "authenticated",          // ← KEY CHANGE: was "upload" (public)
+    type:             "authenticated",
     allowed_formats:  ["mp4", "mov", "avi", "mkv", "webm"],
-    transformation:   [{ quality: "auto" }],
-    // Cloudinary will chunk uploads automatically for files > ~100 MB
-    chunk_size:       6_000_000,               // 6 MB chunks
-  },
+    // ← Remove the custom public_id entirely; Cloudinary auto-generates it
+    // The full path (folder + id) is what comes back as req.file.public_id
+  }),
 });
 
 // ─── PDF / notes storage ──────────────────────────────────────────────────────

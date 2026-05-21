@@ -2,6 +2,7 @@ import Course from "../models/Course.model.js";
 import Enrollment from "../models/Enrollment.model.js";
 import { asyncHandler, AppError } from "../middleware/error.middleware.js";
 import { cloudinary } from "../config/cloudinary.js";
+import streamifier from "streamifier";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC ENDPOINTS
@@ -84,11 +85,18 @@ export const getCourseBySlug = asyncHandler(async (req, res, next) => {
     : { slug: param, isPublished: true, approvalStatus: "approved" };
 
   // Creators/admins can view unpublished courses via _id
-  if (isObjectId && req.user && (req.user.role === "creator" || req.user.role === "admin")) {
+  if (
+    isObjectId &&
+    req.user &&
+    (req.user.role === "creator" || req.user.role === "admin")
+  ) {
     delete query.isPublished;
   }
 
-  const course = await Course.findOne(query).populate("creator", "name avatar bio");
+  const course = await Course.findOne(query).populate(
+    "creator",
+    "name avatar bio",
+  );
 
   if (!course) return next(new AppError("Course not found.", 404));
 
@@ -122,7 +130,43 @@ export const getCourseBySlug = asyncHandler(async (req, res, next) => {
       })),
     }));
   }
+  if (isEnrolled || isOwner) {
+    courseObj.sections = courseObj.sections.map((sec) => ({
+      ...sec,
 
+      lessons: sec.lessons.map((lesson) => {
+        let signedUrl = "";
+
+        if (lesson.video?.public_id) {
+          signedUrl = cloudinary.url(lesson.video.public_id, {
+            resource_type: "video",
+
+            type: "authenticated",
+
+            secure: true,
+
+            sign_url: true,
+
+            streaming_profile: "full_hd",
+
+            format: "m3u8",
+
+            expires_at: Math.floor(Date.now() / 1000) + 300,
+          });
+        }
+
+        return {
+          ...lesson,
+
+          video: {
+            ...lesson.video,
+
+            url: signedUrl,
+          },
+        };
+      }),
+    }));
+  }
   res.status(200).json({
     success: true,
     course: courseObj,
@@ -145,7 +189,9 @@ export const getCourseBySlug = asyncHandler(async (req, res, next) => {
 // @access Creator
 export const getMyCoursesAsCreator = asyncHandler(async (req, res) => {
   const courses = await Course.find({ creator: req.user._id })
-    .select("title slug thumbnail isPublished stats.totalStudents stats.avgRating price createdAt")
+    .select(
+      "title slug thumbnail isPublished stats.totalStudents stats.avgRating price createdAt",
+    )
     .sort({ createdAt: -1 });
 
   res.status(200).json({ success: true, courses });
@@ -155,10 +201,18 @@ export const getMyCoursesAsCreator = asyncHandler(async (req, res) => {
 // @access Creator
 export const createCourse = asyncHandler(async (req, res, next) => {
   const {
-    title, description, shortDescription,
-    category, tags, language, level,
-    price, discountPrice, isFree,
-    requirements, whatYouLearn,
+    title,
+    description,
+    shortDescription,
+    category,
+    tags,
+    language,
+    level,
+    price,
+    discountPrice,
+    isFree,
+    requirements,
+    whatYouLearn,
   } = req.body;
 
   const course = await Course.create({
@@ -177,8 +231,15 @@ export const createCourse = asyncHandler(async (req, res, next) => {
     creator: req.user._id,
     // Thumbnail from multer upload
     thumbnail: req.file
-      ? { public_id: req.file.public_id, url: req.file.path }
-      : { public_id: "", url: "" },
+      ? {
+          public_id: req.file.public_id || req.file.filename,
+
+          url: req.file.path || req.file.secure_url,
+        }
+      : {
+          public_id: "",
+          url: "",
+        },
   });
 
   res.status(201).json({
@@ -214,23 +275,36 @@ export const updateCourse = asyncHandler(async (req, res, next) => {
   }
 
   const fields = [
-    "title", "description", "shortDescription", "category",
-    "language", "level", "price", "discountPrice", "isFree",
+    "title",
+    "description",
+    "shortDescription",
+    "category",
+    "language",
+    "level",
+    "price",
+    "discountPrice",
+    "isFree",
   ];
   fields.forEach((f) => {
     if (req.body[f] !== undefined) course[f] = req.body[f];
   });
 
   if (req.body.tags) course.tags = JSON.parse(req.body.tags);
-  if (req.body.requirements) course.requirements = JSON.parse(req.body.requirements);
-  if (req.body.whatYouLearn) course.whatYouLearn = JSON.parse(req.body.whatYouLearn);
+  if (req.body.requirements)
+    course.requirements = JSON.parse(req.body.requirements);
+  if (req.body.whatYouLearn)
+    course.whatYouLearn = JSON.parse(req.body.whatYouLearn);
 
   // New thumbnail uploaded
   if (req.file) {
-    if (course.thumbnail.public_id) {
+    if (course.thumbnail && course.thumbnail.public_id) {
       await cloudinary.uploader.destroy(course.thumbnail.public_id);
     }
-    course.thumbnail = { public_id: req.file.public_id, url: req.file.path };
+    course.thumbnail = {
+      public_id: req.file.public_id || req.file.filename,
+
+      url: req.file.path || req.file.secure_url,
+    };
   }
 
   await course.save();
@@ -251,24 +325,32 @@ export const deleteCourse = asyncHandler(async (req, res, next) => {
   // Clean up Cloudinary assets
   const destroyPromises = [];
   if (course.thumbnail.public_id) {
-    destroyPromises.push(cloudinary.uploader.destroy(course.thumbnail.public_id));
+    destroyPromises.push(
+      cloudinary.uploader.destroy(course.thumbnail.public_id),
+    );
   }
   if (course.previewVideo.public_id) {
     destroyPromises.push(
-      cloudinary.uploader.destroy(course.previewVideo.public_id, { resource_type: "video" })
+      cloudinary.uploader.destroy(course.previewVideo.public_id, {
+        resource_type: "video",
+      }),
     );
   }
   course.sections.forEach((sec) => {
     sec.lessons.forEach((lesson) => {
       if (lesson.video?.public_id) {
         destroyPromises.push(
-          cloudinary.uploader.destroy(lesson.video.public_id, { resource_type: "video" })
+          cloudinary.uploader.destroy(lesson.video.public_id, {
+            resource_type: "video",
+          }),
         );
       }
       lesson.notes.forEach((note) => {
         if (note.public_id) {
           destroyPromises.push(
-            cloudinary.uploader.destroy(note.public_id, { resource_type: "raw" })
+            cloudinary.uploader.destroy(note.public_id, {
+              resource_type: "raw",
+            }),
           );
         }
       });
@@ -294,7 +376,9 @@ export const togglePublish = asyncHandler(async (req, res, next) => {
   // Must have at least 1 section with 1 lesson to publish
   const hasContent = course.sections.some((s) => s.lessons.length > 0);
   if (!course.isPublished && !hasContent) {
-    return next(new AppError("Add at least one lesson before publishing.", 400));
+    return next(
+      new AppError("Add at least one lesson before publishing.", 400),
+    );
   }
 
   course.isPublished = !course.isPublished;
@@ -318,23 +402,66 @@ export const togglePublish = asyncHandler(async (req, res, next) => {
 
 // @route  POST /api/courses/:courseId/preview-video
 // @access Creator
+// export const uploadPreviewVideo = asyncHandler(async (req, res, next) => {
+//     console.log("FILE DATA:", req.file);
+//   const course = await Course.findById(req.params.courseId);
+//   if (!course) return next(new AppError("Course not found.", 404));
+
+//   if (course.creator.toString() !== req.user._id.toString()) {
+//     return next(new AppError("Not authorised.", 403));
+//   }
+//   if (!req.file) return next(new AppError("No video file uploaded.", 400));
+
+//   // Delete old preview
+//   if (course.previewVideo.public_id) {
+//     await cloudinary.uploader.destroy(course.previewVideo.public_id, {
+//       resource_type: "video",
+//     });
+//   }
+
+//   course.previewVideo = {
+//   public_id: req.file.filename,
+//   url: req.file.path,
+//   duration: req.file.duration || 0,
+// };
+//   await course.save();
+
+//   res.status(200).json({
+//     success: true,
+//     message: "Preview video uploaded.",
+//     previewVideo: course.previewVideo,
+//   });
+// });
 export const uploadPreviewVideo = asyncHandler(async (req, res, next) => {
+
+   console.log(JSON.stringify(req.file, null, 2));
+
   const course = await Course.findById(req.params.courseId);
-  if (!course) return next(new AppError("Course not found.", 404));
+
+  if (!course) {
+    return next(new AppError("Course not found.", 404));
+  }
 
   if (course.creator.toString() !== req.user._id.toString()) {
     return next(new AppError("Not authorised.", 403));
   }
-  if (!req.file) return next(new AppError("No video file uploaded.", 400));
 
-  // Delete old preview
-  if (course.previewVideo.public_id) {
-    await cloudinary.uploader.destroy(course.previewVideo.public_id, {
-      resource_type: "video",
-    });
+  if (!req.file) {
+    return next(new AppError("No video file uploaded.", 400));
   }
 
-  course.previewVideo = { public_id: req.file.public_id, url: req.file.path };
+  course.previewVideo = {
+  public_id: req.file.public_id || req.file.filename, // ← both exist, public_id is preferred
+  url:       req.file.path,
+  duration:  req.file.duration || 0,
+};
+console.log("req.file keys:", Object.keys(req.file));
+console.log("public_id:", req.file.public_id);
+console.log("filename:", req.file.filename);
+console.log("path:", req.file.path);
+
+  console.log("SAVED VIDEO =", course.previewVideo);
+
   await course.save();
 
   res.status(200).json({

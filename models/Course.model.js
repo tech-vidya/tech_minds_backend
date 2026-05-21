@@ -92,11 +92,11 @@ const courseSchema = new mongoose.Schema(
     // Media
     thumbnail: {
       public_id: { type: String, default: "" },
-      // url: { type: String, default: "" },
+      url: { type: String, default: "" },
     },
     previewVideo: {
       public_id: { type: String, default: "" },
-      // url: { type: String, default: "" },
+      url: { type: String, default: "" },
     },
 
     // Pricing

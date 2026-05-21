@@ -91,7 +91,19 @@ router.post(
   "/:courseId/preview-video",
   protect,
   authorizeRoles("creator"),
+
+  (req, res, next) => {
+    console.log("ROUTE HIT");
+    next();
+  },
+
   uploadVideo.single("video"),
+
+  (req, res, next) => {
+    console.log("AFTER MULTER", req.file);
+    next();
+  },
+
   uploadPreviewVideo
 );
 

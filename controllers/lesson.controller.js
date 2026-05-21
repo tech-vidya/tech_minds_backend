@@ -214,11 +214,11 @@ export const uploadLessonVideo = asyncHandler(async (req, res, next) => {
 
   // Cloudinary returns duration in req.file for videos
   lesson.video = {
-    public_id: req.file.public_id,
-    url: req.file.path,
-    duration: Math.round(req.file.duration || 0),
-    isProcessing: false,
-  };
+  public_id: req.file.filename,
+  url: req.file.path,
+  duration: Math.round(req.file.duration || 0),
+  isProcessing: false,
+};
 
   await course.save();
   res.status(200).json({
@@ -226,6 +226,7 @@ export const uploadLessonVideo = asyncHandler(async (req, res, next) => {
     message: "Video uploaded.",
     video: lesson.video,
   });
+  console.log("VIDEO FILE:", req.file);
 });
 
 // @route  DELETE /api/courses/:courseId/sections/:sectionId/lessons/:lessonId/video
