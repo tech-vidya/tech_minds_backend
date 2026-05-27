@@ -9,6 +9,7 @@ import {
   getApplicationsForInternship,
   getAllApplications,
   applyForInternship,
+  applyStatic,
 } from "../controllers/internship.controller.js";
 import { protect, authorizeRoles } from "../middleware/auth.middleware.js";
 import { updateApplicationStatus } from "../controllers/internship.controller.js";
@@ -18,6 +19,7 @@ const router = express.Router();
 // ── Public ──────────────────────────────────────────────────────────────────
 router.get("/", getAllInternships);
 router.get("/:id", getInternshipById);
+router.post("/apply-static", applyStatic);
 router.post("/:id/apply", applyForInternship);
 
 // ── Admin ────────────────────────────────────────────────────────────────────

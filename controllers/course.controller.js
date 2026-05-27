@@ -28,8 +28,11 @@ export const getCourses = asyncHandler(async (req, res) => {
 
   // Full-text search on title + description
   if (search) {
-    query.$text = { $search: search };
-  }
+  query.$or = [
+    { title: { $regex: search, $options: "i" } },
+    { description: { $regex: search, $options: "i" } },
+  ];
+}
 
   if (category) query.category = { $regex: category, $options: "i" };
   if (level) query.level = level;
@@ -468,5 +471,16 @@ console.log("path:", req.file.path);
     success: true,
     message: "Preview video uploaded.",
     previewVideo: course.previewVideo,
+  });
+});
+export const getCategories = asyncHandler(async (req, res) => {
+  const categories = await Course.distinct("category", {
+    isPublished: true,
+    approvalStatus: "approved",
+  });
+ 
+  res.status(200).json({
+    success: true,
+    categories: categories.sort(), // alphabetical
   });
 });

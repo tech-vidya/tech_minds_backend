@@ -9,6 +9,7 @@ import {
   deleteCourse,
   togglePublish,
   uploadPreviewVideo,
+  getCategories
 } from "../controllers/course.controller.js";
 import {
   addSection,
@@ -46,6 +47,7 @@ router.get(
 
 // ─── Public ──────────────────────────────────────────────────────────────────
 router.get("/", optionalAuth, getCourses);
+router.get("/categories", getCategories);
 // Authenticated user gets richer response (enrollment status, unlocked videos)
 router.get("/:slug", optionalAuth, getCourseBySlug);
 
